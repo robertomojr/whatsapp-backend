@@ -1,20 +1,20 @@
-import express from "express";
-import OpenAI from "openai";
+const express = require("express");
+const OpenAI = require("openai");
 
 const app = express();
 app.use(express.json());
 
-// cliente OpenAI (usa variável de ambiente)
+// cliente OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// rota raiz (teste simples)
+// rota raiz
 app.get("/", (req, res) => {
   res.send("Backend WhatsApp + OpenAI está vivo 🚀");
 });
 
-// rota que simula o webhook do WhatsApp
+// rota que simula webhook do WhatsApp
 app.post("/webhook", async (req, res) => {
   try {
     const userMessage = req.body.message || "Diga olá";
@@ -34,20 +34,23 @@ app.post("/webhook", async (req, res) => {
       ],
     });
 
-    const reply = completion.choices[0].message.content;
-
     res.json({
       ok: true,
-      reply,
+      reply: completion.choices[0].message.content,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ ok: false, error: "Erro ao chamar OpenAI" });
+    res.status(500).json({
+      ok: false,
+      error: "Erro ao chamar OpenAI",
+    });
   }
 });
 
-// porta definida pelo Render
+// porta usada pelo Render
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("Servidor rodando na porta", PORT);
 });
+
+
