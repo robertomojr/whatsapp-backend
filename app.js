@@ -60,6 +60,96 @@ app.get("/test", (req, res) => {
   `);
 });
 
+// ================================
+// WhatsApp Cloud API (Meta) Webhook
+// ================================
+
+const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
+const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+// 1) Verificação do webhook (GET)
+app.get("/whatsapp/webhook", (req, res) => {
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+
+  if (mode === "subscribe" && token === WHATSAPP_VERIFY_TOKEN) {
+    return res.status(200).send(challenge);
+  }
+  return res.sendStatus(403);
+});
+
+// 2) Receber mensagens (POST)
+app.post("/whatsapp/webhook", async (req, res) => {
+  try {
+    // Responder rápido ao WhatsApp (boa prática)
+    res.sendStatus(200);
+
+    const body = req.body;
+
+    // Estrutura padrão do WhatsApp Cloud API
+    const entry = body?.entry?.[0];
+    const changes = entry?.changes?.[0];
+    const value = changes?.value;
+
+    const messages = value?.messages;
+    if (!messages || messages.length === 0) return;
+
+    const msg = messages[0];
+    const from = msg.from; // número do usuário (ex: "5511999999999")
+    const text = msg?.text?.body;
+
+    // Ignorar mensagens que não sejam texto por enquanto
+    if (!text) return;
+
+    // 2.1) Chamar OpenAI para gerar resposta
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4.1-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "Você é um assistente curto, educado e objetivo. Responda em português do Brasil.",
+        },
+        { role: "user", content: text },
+      ],
+    });
+
+    const reply = completion.choices[0].message.content || "Não entendi. Pode repetir?";
+
+    // 2.2) Enviar resposta de volta ao WhatsApp
+    if (!WHATSAPP_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
+      console.error("Faltam WHATSAPP_TOKEN ou WHATSAPP_PHONE_NUMBER_ID no Render.");
+      return;
+    }
+
+    const url = `https://graph.facebook.com/v20.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
+
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to: from,
+        text: { body: reply },
+      }),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error("Erro ao enviar mensagem WhatsApp:", errText);
+    }
+  } catch (err) {
+    console.error("Erro no webhook do WhatsApp:", err);
+    // (já respondemos 200 acima)
+  }
+});
+
+
 // rota que simula webhook do WhatsApp
 app.post("/webhook", async (req, res) => {
   try {
