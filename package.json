@@ -9,5 +9,6 @@
   "dependencies": {
     "express": "^5.0.0",
     "openai": "^4.0.0"
+    "@supabase/supabase-js": "^2.39.5"
   }
 }
